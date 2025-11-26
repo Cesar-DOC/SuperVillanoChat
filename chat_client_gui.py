@@ -7,6 +7,8 @@ import struct
 import os
 import tkinter as tk
 from tkinter import scrolledtext, messagebox, filedialog
+from playsound import playsound
+from PIL import Image, ImageTk
 
 HOST_DEFECTO = "127.0.0.1"
 PORT_DEFECTO = 65436
@@ -56,7 +58,9 @@ def recv_frame(sock: socket.socket):
 class ChatClientGUI:
     def __init__(self, master):
         self.master = master
-        self.master.title("Chat multiusuario con archivos")
+        self.master.title("SuperVillano Chat")
+
+        self.imagenes_chat = []   # evitar que el GC borre las imágenes
 
         # Estado de red
         self.sock = None
@@ -128,6 +132,47 @@ class ChatClientGUI:
         # Cierre ordenado
         self.master.protocol("WM_DELETE_WINDOW", self.cerrar)
 
+    def _insertar_imagen_chat(self, ruta):
+        try:
+            # Cargar y crear la miniatura para la vista previa
+            img = Image.open(ruta)
+
+            max_width = 300
+            if img.width > max_width:
+                ratio = max_width / img.width
+                img = img.resize((max_width, int(img.height * ratio)))
+
+            img_tk = ImageTk.PhotoImage(img)
+
+            # Guardar referencia para evitar GC
+            self.imagenes_chat.append(img_tk)
+
+            # Crear un Label (widget REAL) que será clickeable
+            lbl = tk.Label(self.text_chat, image=img_tk, cursor="hand2")
+            lbl.bind("<Button-1>", lambda e, r=ruta: self._abrir_imagen(r))
+
+            # Insertar el Label dentro del Text como ventana (widget real)
+            self.text_chat.config(state="normal")
+            self.text_chat.window_create(tk.END, window=lbl)
+            self.text_chat.insert(tk.END, "\n")
+            self.text_chat.see(tk.END)
+            self.text_chat.config(state="disabled")
+
+        except Exception as e:
+            self._log_local(f"[ERROR] No se pudo mostrar la imagen: {e}\n")
+
+    def _abrir_imagen(self, ruta):
+        try:
+            if os.name == "nt":  
+                # Windows
+                os.startfile(ruta)
+            else:
+                # macOS usa "open", Linux usa "xdg-open"
+                opener = "open" if sys.platform == "darwin" else "xdg-open"
+                subprocess.Popen([opener, ruta])
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir la imagen: {e}")
+
     # ========= Lógica de red =========
 
     def conectar(self):
@@ -184,6 +229,7 @@ class ChatClientGUI:
                     destino = header.get("to")
                     msg = header.get("message", "")
                     self.cola_mensajes.put(f"{remitente} -> {destino}: {msg}\n")
+                    playsound('notif.wav')
 
                 elif mtype == "file":
                     remitente = header.get("from")
@@ -201,9 +247,15 @@ class ChatClientGUI:
                     with open(ruta, "wb") as f:
                         f.write(payload)
 
-                    self.cola_mensajes.put(
-                        f"[ARCHIVO] {remitente} te envió '{filename}'. Guardado en: {ruta}\n"
-                    )
+                    ext = os.path.splitext(filename)[1].lower()
+
+                    if ext in [".png", ".jpg", ".jpeg", ".gif"]:
+                        # Enviar instrucción a la cola para mostrar imagen
+                        self.cola_mensajes.put(("img", ruta, remitente, filename))
+                    else:
+                        # Mensaje normal
+                        self.cola_mensajes.put(("file", ruta, remitente, filename))
+                    playsound('notif.wav')
 
                 elif mtype == "system":
                     msg = header.get("message", "")
@@ -317,8 +369,23 @@ class ChatClientGUI:
         # Mensajes de chat
         try:
             while True:
-                msg = self.cola_mensajes.get_nowait()
-                self._log_local(msg)
+                item = self.cola_mensajes.get_nowait()
+                if isinstance(item, tuple):
+                    tipo = item[0]
+
+                    if tipo == "img":
+                        _, ruta, remitente, filename = item
+                        self._log_local(f"[IMAGEN] {remitente} envió {filename}\n")
+                        self._insertar_imagen_chat(ruta)
+
+                    elif tipo == "file":
+                        _, ruta, remitente, filename = item
+                        self._log_local(f"[ARCHIVO] {remitente} envió {filename}. Guardado en: {ruta}\n")
+
+                else:
+                    # Mensaje simple
+                    self._log_local(item)
+
         except queue.Empty:
             pass
 
