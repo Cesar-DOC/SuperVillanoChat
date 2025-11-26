@@ -1,83 +1,73 @@
-import pyaudio
-import wave
-import threading
 import os
+import threading
 import time
-from playsound import playsound
+import wave
 
-# Audio recording parameters
-FORMAT = pyaudio.paInt16
+import numpy as np
+import sounddevice as sd
+
+# Parámetros de audio
 CHANNELS = 1
 RATE = 44100
 CHUNK = 512
+FORMAT_BYTES = 2  # 16 bits = 2 bytes por muestra
+
 
 class AudioManager:
     def __init__(self, master=None):
-        """Inicializa el gestor de audio.
-
-        master: referencia al cliente GUI (puede ser None en pruebas)
-        download_folder: carpeta donde se guardan archivos temporales
-        """
         self.master = master
+
         self.folder_sent = "audios_enviados"
         self.folder_received = "audios_recibidos"
 
-        # PyAudio
-        self.p = pyaudio.PyAudio()
-
-        # Estado de grabación
         self.recording = False
-        self.audio_frames = []
-        self.stream = None
+        self.audio_buffer = []
         self.recording_thread = None
 
     def _get_temp_filename(self, username):
-        return f"audio_{username}_{int(time.time())}.wav" #Returna un nombre de archivo temporal único
-    
+        return f"audio_{username}_{int(time.time())}.wav"
+
+    # -----------------------
+    # GRABACIÓN
+    # -----------------------
+
     def start_recording(self):
         if self.recording:
             if self.master:
                 self.master._log_local("Ya está grabando!\n")
             return
 
-        # Reiniciar buffer
-        self.audio_frames = []
-
-        # Abrir stream de entrada
-        try:
-            self.stream = self.p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
-        except Exception as e:
-            if self.master:
-                self.master._log_local(f"[ERROR] No se pudo abrir el micrófono: {e}\n")
-            return
-
+        self.audio_buffer = []
         self.recording = True
-        # iniciar stream de grabación en un hilo separado
-        self.recording_thread = threading.Thread(target=self._record, daemon=True)
+
+        # Hilo de captura
+        self.recording_thread = threading.Thread(target=self._record_loop, daemon=True)
         self.recording_thread.start()
 
         if self.master:
-            try:
-                self.master._log_local("Grabando audio...\n")
-                self.master.master.after(0, self.master.actualizar_botones_audio, True)
-            except Exception:
-                pass
+            self.master._log_local("Grabando audio...\n")
+            self.master.master.after(0, self.master.actualizar_botones_audio, True)
 
-    def _record(self):
-        while self.recording:
-            try:
-                data = self.stream.read(CHUNK, exception_on_overflow=False)
-                self.audio_frames.append(data)
-            except Exception:
-                # Ignorar errores menores de overflow
-                pass
-
+    def _record_loop(self):
+        """Captura audio en CHUNKS usando sounddevice."""
         try:
-            if self.stream is not None:
-                self.stream.stop_stream()
-                self.stream.close()
-        except Exception:
-            pass
+            with sd.InputStream(
+                channels=CHANNELS,
+                samplerate=RATE,
+                blocksize=CHUNK,
+                dtype="int16",
+                callback=self._record_callback,
+            ):
+                while self.recording:
+                    sd.sleep(10)
+        except Exception as e:
+            if self.master:
+                self.master._log_local(f"[ERROR] No se pudo grabar audio: {e}\n")
+
+    def _record_callback(self, indata, frames, time_, status):
+        """Callback de sounddevice: guarda chunks de audio."""
+        if self.recording:
+            self.audio_buffer.append(indata.copy())
 
     def stop_recording(self, destino, sender_username, send_frame_func, log_local_func):
         if not self.recording:
@@ -87,14 +77,14 @@ class AudioManager:
         self.recording = False
         if self.recording_thread:
             self.recording_thread.join()
+
         log_local_func("[PROCESANDO] Guardando y enviando nota de voz...\n")
 
-        hilo_envio = threading.Thread(
-            target=self._hilo_guardar_enviar,
+        threading.Thread(
+            target=self._save_and_send,
             args=(destino, sender_username, send_frame_func, log_local_func),
             daemon=True,
-        )
-        hilo_envio.start()
+        ).start()
 
         if self.master:
             try:
@@ -102,91 +92,89 @@ class AudioManager:
             except Exception:
                 pass
 
-    def _hilo_guardar_enviar (self, destino, sender_username, send_frame_func, log_local_func): #Guarda el audio y lo envía
-        nombre_archivo = self._get_temp_filename(sender_username)
-        ruta_temporal = os.path.join(self.folder_sent, nombre_archivo)
+    def _save_and_send(self, destino, sender_username, send_frame_func, log_local_func):
+        if len(self.audio_buffer) < 5:
+            log_local_func("[ERROR] Grabación demasiado corta.\n")
+            return
 
-        # Guardar el archivo WAV
+        os.makedirs(self.folder_sent, exist_ok=True)
+
+        filename = self._get_temp_filename(sender_username)
+        path = os.path.join(self.folder_sent, filename)
+
+        # Guardar WAV
         try:
-            if len(self.audio_frames) < 5:
-                log_local_func("[ERROR] La grabación fue demasiado corta o falló. No se enviará audio.\n")
-                return
-            os.makedirs(self.folder_sent, exist_ok=True)
-            with wave.open(ruta_temporal, 'wb') as wf:
+            audio = np.concatenate(self.audio_buffer, axis=0)
+
+            with wave.open(path, "wb") as wf:
                 wf.setnchannels(CHANNELS)
-                wf.setsampwidth(self.p.get_sample_size(FORMAT))
+                wf.setsampwidth(FORMAT_BYTES)
                 wf.setframerate(RATE)
-                wf.writeframes(b''.join(self.audio_frames))
-            tam = os.path.getsize(ruta_temporal)
-            if tam < 1000:
-                log_local_func("[ERROR] El archivo de audio puede estar corrupto. No se enviará audio.\n")
-                return
+                wf.writeframes(audio.tobytes())
+
         except Exception as e:
             log_local_func(f"[ERROR] Fallo al guardar audio: {e}\n")
             return
-        finally:
-            # Limpiar buffer local
-            self.audio_frames = []
 
-        # Enviar como frame con tipo "audio"
+        # Enviar
         try:
-            tam = os.path.getsize(ruta_temporal)
+            tam = os.path.getsize(path)
 
             header = {
                 "type": "audio",
                 "from": sender_username,
                 "to": destino,
-                "filename": nombre_archivo,
+                "filename": filename,
                 "filesize": tam,
             }
 
-            with open(ruta_temporal, "rb") as f:
+            with open(path, "rb") as f:
                 datos = f.read()
 
             send_frame_func(header, datos)
-            log_local_func(f"[AUDIO] Yo -> {destino}: '{nombre_archivo}' ({tam} bytes)\n")
+            log_local_func(f"[AUDIO] Yo -> {destino}: '{filename}' ({tam} bytes)\n")
 
         except Exception as e:
-            log_local_func(f"[ERROR] No se pudo enviar el audio: {e}\n")
+            log_local_func(f"[ERROR] No se pudo enviar audio: {e}\n")
+
+        self.audio_buffer = []
+
+    # -----------------------
+    # REPRODUCCIÓN
+    # -----------------------
 
     def reproducir_audio(self, ruta_audio, log_local_func):
-        """Inicia la reproducción de un archivo WAV en un nuevo hilo."""
-        hilo = threading.Thread(target=self._hilo_reproductor, args=(ruta_audio, log_local_func), daemon=True)
-        hilo.start()
-    
-    def _hilo_reproductor(self, ruta_audio, log_local_func):
-        """Ejecuta la reproducción real del archivo WAV."""
+        threading.Thread(
+            target=self._play_audio, args=(ruta_audio, log_local_func), daemon=True
+        ).start()
+
+    def _play_audio(self, ruta_audio, log_local_func):
         try:
             if not os.path.exists(ruta_audio):
-                raise FileNotFoundError(f"archivo no encontrado: {ruta_audio}")
-            with wave.open(ruta_audio, 'rb') as wf:
-                
-                # Abrir stream de reproducción
-                stream = self.p.open(format=self.p.get_format_from_width(wf.getsampwidth()),
-                                     channels=wf.getnchannels(),
-                                     rate=wf.getframerate(),
-                                     output=True)
+                raise FileNotFoundError("No existe el archivo WAV")
+
+            with wave.open(ruta_audio, "rb") as wf:
+                channels = wf.getnchannels()
+                rate = wf.getframerate()
+                sampwidth = wf.getsampwidth()
+
+                if sampwidth != 2:
+                    raise ValueError("Solo se soportan WAV de 16 bits")
 
                 data = wf.readframes(CHUNK)
+
                 while data:
-                    stream.write(data)
+                    audio_np = np.frombuffer(data, dtype=np.int16)
+                    sd.play(audio_np, samplerate=rate)
+                    sd.wait()
                     data = wf.readframes(CHUNK)
 
-                stream.stop_stream()
-                stream.close()
-                log_local_func(f"[AUDIO] Reproducción de '{os.path.basename(ruta_audio)}' finalizada.\n")
+            log_local_func(
+                f"[AUDIO] Reproducción '{os.path.basename(ruta_audio)}' finalizada.\n"
+            )
 
         except Exception as e:
-            # Intentar fallback con playsound si PyAudio falla
-            log_local_func(f"[WARN] Reproducción con PyAudio falló: {e}. Intentando fallback...\n")
-            try:
-                playsound(ruta_audio)
-                log_local_func(f"[AUDIO] Reproducción (fallback) de '{os.path.basename(ruta_audio)}' finalizada.\n")
-            except Exception as e2:
-                log_local_func(f"[ERROR] Fallo al reproducir audio '{os.path.basename(ruta_audio)}' (playsound): {e2}\n")
+            log_local_func(f"[ERROR] Fallo al reproducir audio: {e}\n")
 
     def terminate(self):
-        try:
-            self.p.terminate()
-        except Exception:
-            pass
+        pass  # No es necesario con sounddevice

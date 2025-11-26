@@ -10,7 +10,7 @@ from tkinter import Toplevel, filedialog, messagebox, scrolledtext, ttk
 
 from audio_manager import AudioManager
 from PIL import Image, ImageTk
-from playsound import playsound
+from playsound3 import playsound
 
 HOST_DEFECTO = "127.0.0.1"
 PORT_DEFECTO = 65436
