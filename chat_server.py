@@ -111,7 +111,7 @@ def manejar_cliente(sock: socket.socket, addr):
                     if destino == "Todos":
                         # Enviar a todos excepto al remitente
                         for user, dest_sock in usuarios.items():
-                            if user != username:
+                            if user != username and user != "Todos":
                                 send_frame(dest_sock, header)
                     else:
                         dest_sock = usuarios.get(destino)
@@ -136,7 +136,7 @@ def manejar_cliente(sock: socket.socket, addr):
                     if destino == "Todos":
                         # Enviar a todos excepto al remitente
                         for user, dest_sock in usuarios.items():
-                            if user != username:
+                            if user != username and user != "Todos":
                                 send_frame(dest_sock, header, payload)
                     else:
                         dest_sock = usuarios.get(destino)
