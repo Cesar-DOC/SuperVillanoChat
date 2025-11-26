@@ -8,4 +8,5 @@ Pedro -----> Sonido por mensaje
 Pedro -----> Imagenes in-chat
 Cesar -----> Enviar audios
 Cesar -----> Integracion de emojis
+Jorge -----> Mostrar la hora en cada mensaje 
 ```
