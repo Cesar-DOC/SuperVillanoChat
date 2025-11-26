@@ -108,18 +108,24 @@ def manejar_cliente(sock: socket.socket, addr):
                 print(f"[MSG] {username} -> {destino}: {mensaje}")
 
                 with lock:
-                    dest_sock = usuarios.get(destino)
-                if dest_sock:
-                    send_frame(dest_sock, header)  # reenviamos tal cual
-                else:
-                    # Enviar error al remitente
-                    err = {
-                        "type": "system",
-                        "from": "SERVER",
-                        "to": username,
-                        "message": f"Usuario '{destino}' no existe o no está conectado.",
-                    }
-                    send_frame(sock, err)
+                    if destino == "Todos":
+                        # Enviar a todos excepto al remitente
+                        for user, dest_sock in usuarios.items():
+                            if user != username:
+                                send_frame(dest_sock, header)
+                    else:
+                        dest_sock = usuarios.get(destino)
+                    if dest_sock:
+                        send_frame(dest_sock, header)  # reenviamos tal cual
+                    else:
+                        # Enviar error al remitente
+                        err = {
+                            "type": "system",
+                            "from": "SERVER",
+                            "to": username,
+                            "message": f"Usuario '{destino}' no existe o no está conectado.",
+                        }
+                        send_frame(sock, err)
 
             elif mtype == "file":
                 destino = header.get("to")
@@ -127,18 +133,24 @@ def manejar_cliente(sock: socket.socket, addr):
                 print(f"[FILE] {username} -> {destino}: {filename}")
 
                 with lock:
-                    dest_sock = usuarios.get(destino)
-                if dest_sock:
-                    # Reenviar mismo header y payload al destinatario
-                    send_frame(dest_sock, header, payload)
-                else:
-                    err = {
-                        "type": "system",
-                        "from": "SERVER",
-                        "to": username,
-                        "message": f"No se pudo entregar el archivo, usuario '{destino}' no está conectado.",
-                    }
-                    send_frame(sock, err)
+                    if destino == "Todos":
+                        # Enviar a todos excepto al remitente
+                        for user, dest_sock in usuarios.items():
+                            if user != username:
+                                send_frame(dest_sock, header, payload)
+                    else:
+                        dest_sock = usuarios.get(destino)
+                    if dest_sock:
+                        # Reenviar mismo header y payload al destinatario
+                        send_frame(dest_sock, header, payload)
+                    else:
+                        err = {
+                            "type": "system",
+                            "from": "SERVER",
+                            "to": username,
+                            "message": f"No se pudo entregar el archivo, usuario '{destino}' no está conectado.",
+                        }
+                        send_frame(sock, err)
 
             else:
                 # Mensaje no soportado
