@@ -42,7 +42,8 @@ def recv_frame(sock: socket.socket):
     header = json.loads(header_bytes.decode("utf-8"))
 
     payload = b""
-    if header.get("type") == "file":
+    # Leer payload para tipos que incluyen datos binarios
+    if header.get("type") in ("file", "audio"):
         filesize = header.get("filesize", 0)
         if filesize > 0:
             payload = recv_exact(sock, filesize)
@@ -127,10 +128,10 @@ def manejar_cliente(sock: socket.socket, addr):
                             }
                             send_frame(sock, err)
 
-            elif mtype == "file":
+            elif mtype == "file" or mtype == "audio":
                 destino = header.get("to")
                 filename = header.get("filename", "archivo")
-                print(f"[FILE] {username} -> {destino}: {filename}")
+                print(f"[{mtype.upper()}] {username} -> {destino}: {filename}")
 
                 with lock:
                     if destino == "Todos":

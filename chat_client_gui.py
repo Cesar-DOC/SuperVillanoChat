@@ -9,11 +9,13 @@ import tkinter as tk
 from tkinter import scrolledtext, messagebox, filedialog
 from playsound import playsound
 from PIL import Image, ImageTk
+from audio_manager import AudioManager
 
 HOST_DEFECTO = "127.0.0.1"
 PORT_DEFECTO = 65436
 
 CARPETA_DESCARGAS = "descargas_chat"
+CARPETA_RECIBIDOS = "audios_recibidos"
 os.makedirs(CARPETA_DESCARGAS, exist_ok=True)
 
 
@@ -47,7 +49,7 @@ def recv_frame(sock: socket.socket):
     header = json.loads(header_bytes.decode("utf-8"))
 
     payload = b""
-    if header.get("type") == "file":
+    if header.get("type") in ("file", "audio"):
         filesize = header.get("filesize", 0)
         if filesize > 0:
             payload = recv_exact(sock, filesize)
@@ -66,6 +68,8 @@ class ChatClientGUI:
         self.sock = None
         self.conectado = False
         self.username = None
+
+        self.audio_manager = AudioManager(self)
 
         # Cola para mensajes entrantes (texto que se mostrará)
         self.cola_mensajes = queue.Queue()
@@ -126,6 +130,12 @@ class ChatClientGUI:
         self.btn_archivo = tk.Button(frame_bottom, text="Enviar archivo", command=self.enviar_archivo)
         self.btn_archivo.pack(side="left", padx=5)
 
+        self.btn_grabar_audio = tk.Button(frame_bottom, text="Grabar audio", command=self.audio_manager.start_recording)
+        self.btn_grabar_audio.pack(side="left", padx=5)
+
+        self.btn_detener_audio = tk.Button(frame_bottom, text="Detener grabación", command=self._detener_grabacion_audio, state="disabled")   
+        self.btn_detener_audio.pack(side="left", padx=5)
+
         # Timer para procesar colas
         self.master.after(100, self.procesar_colas)
 
@@ -160,6 +170,31 @@ class ChatClientGUI:
 
         except Exception as e:
             self._log_local(f"[ERROR] No se pudo mostrar la imagen: {e}\n")
+
+    def boton_reproducir_audio(self, ruta):
+        try:
+            btn_play = tk.Button(
+                self.text_chat,
+                text="Reproducir",
+                command=lambda r=ruta: self.audio_manager.reproducir_audio(r, self._log_local),
+                relief="raised",
+                bd=1,
+                padx=4,
+                pady=2,
+            )
+
+            self.text_chat.config(state="normal")
+            self.text_chat.window_create(tk.END, window=btn_play)
+            self.text_chat.insert(tk.END, "\n")
+            self.text_chat.see(tk.END)
+            self.text_chat.config(state="disabled")
+            # Forzar renderizado inmediato del botón embebido
+            try:
+                btn_play.update_idletasks()
+            except Exception:
+                pass
+        except Exception as e:
+            self._log_local(f"[ERROR] No se pudo insertar botón de audio: {e}\n")
 
     def _abrir_imagen(self, ruta):
         try:
@@ -231,11 +266,15 @@ class ChatClientGUI:
                     self.cola_mensajes.put(f"{remitente} -> {destino}: {msg}\n")
                     playsound('notif.wav')
 
-                elif mtype == "file":
+                elif mtype == "file" or mtype == "audio":
                     remitente = header.get("from")
                     destino = header.get("to")
                     filename = header.get("filename", "archivo")
-                    ruta = os.path.join(CARPETA_DESCARGAS, filename)
+                    if mtype == "file":
+                        ruta = os.path.join(CARPETA_DESCARGAS, filename)
+                    else:
+                        ruta = os.path.join(CARPETA_RECIBIDOS, filename)
+                        os.makedirs(CARPETA_RECIBIDOS, exist_ok=True)
 
                     # Evitar sobrescribir: si existe, agrega sufijo
                     base, ext = os.path.splitext(ruta)
@@ -249,7 +288,9 @@ class ChatClientGUI:
 
                     ext = os.path.splitext(filename)[1].lower()
 
-                    if ext in [".png", ".jpg", ".jpeg", ".gif"]:
+                    if mtype == "audio":
+                        self.cola_mensajes.put(("audio", ruta, remitente, filename))
+                    elif ext in [".png", ".jpg", ".jpeg", ".gif"]:
                         # Enviar instrucción a la cola para mostrar imagen
                         self.cola_mensajes.put(("img", ruta, remitente, filename))
                     else:
@@ -357,6 +398,40 @@ class ChatClientGUI:
         except OSError as e:
             messagebox.showerror("Error", f"No se pudo enviar el archivo: {e}")
 
+    def _handle_iniciar_grabacion_audio(self):
+        if not self.conectado or not self.sock:
+            messagebox.showwarning("Chat", "No estás conectado.")
+            return
+        destino = self._obtener_destinatario()
+        if not destino:
+            return
+        self.audio_manager.start_recording()
+
+    def _detener_grabacion_audio(self):
+        if not self.conectado or not self.sock:
+            messagebox.showwarning("Chat", "No estás conectado.")
+            return
+        destino = self._obtener_destinatario()
+        if not destino:
+            self.audio_manager.grabando = False 
+            self.actualizar_botones_audio(False)
+            messagebox.showwarning("Chat", "Audio no enviado: No se seleccionó destinatario.")
+            return
+        self.audio_manager.stop_recording(
+            destino,
+            self.username,
+            send_frame_func=lambda header, payload=b"": send_frame(self.sock, header, payload),
+            log_local_func=self._log_local
+        )
+    
+    def actualizar_botones_audio(self, grabando: bool):
+        if grabando:
+            self.btn_grabar_audio.config(state="disabled")
+            self.btn_detener_audio.config(state="normal")
+        else:
+            self.btn_grabar_audio.config(state=tk.NORMAL if self.conectado else tk.DISABLED)
+            self.btn_detener_audio.config(state="disabled")
+
     # ========= GUI helpers =========
 
     def _log_local(self, texto: str):
@@ -381,6 +456,11 @@ class ChatClientGUI:
                     elif tipo == "file":
                         _, ruta, remitente, filename = item
                         self._log_local(f"[ARCHIVO] {remitente} envió {filename}. Guardado en: {ruta}\n")
+                    
+                    elif tipo == "audio":
+                        _, ruta, remitente, filename = item
+                        self._log_local(f"[AUDIO] {remitente} envió {filename}. Guardado en: {ruta}\n")
+                        self.boton_reproducir_audio(ruta)
 
                 else:
                     # Mensaje simple
@@ -404,6 +484,11 @@ class ChatClientGUI:
 
     def cerrar(self):
         self.conectado = False
+        # audio_manager.close() no existe; usar terminate()
+        try:
+            self.audio_manager.terminate()
+        except Exception:
+            pass
         if self.sock:
             try:
                 self.sock.shutdown(socket.SHUT_RDWR)
