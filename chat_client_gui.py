@@ -7,11 +7,10 @@ import struct
 import threading
 import tkinter as tk
 from tkinter import Toplevel, filedialog, messagebox, scrolledtext, ttk
-
 from PIL import Image, ImageTk
 from playsound3 import playsound
-
 from audio_manager import AudioManager
+from emoji_manager import mostrar_paleta_emojis
 
 HOST_DEFECTO = "127.0.0.1"
 PORT_DEFECTO = 65436
@@ -154,6 +153,14 @@ class ChatClientGUI:
         self.entry_msg = tk.Entry(frame_bottom)
         self.entry_msg.pack(side="left", fill="x", expand=True)
         self.entry_msg.bind("<Return>", self.enviar_texto_evento)
+
+        emoji_button = tk.Button(
+            frame_bottom, 
+            text="😊", 
+            command=lambda: mostrar_paleta_emojis(self),
+            font=("Arial", 14)
+        )
+        emoji_button.pack(side=tk.LEFT, padx=5)
 
         self.btn_enviar = tk.Button(
             frame_bottom, text="Enviar mensaje", command=self.enviar_texto
@@ -450,21 +457,30 @@ class ChatClientGUI:
             barra["value"] = p
             barra.update_idletasks()
 
-        try:
-            # Leer archivo
-            with open(ruta, "rb") as f:
-                datos = f.read()
-            # Enviar con barra de progreso
-            send_frame(self.sock, header, datos, progress_callback=update_barra)
-            # Cerrar ventana al terminar
-            win.destroy()
+        # --- MOVER ENVRIO A UN HILO ---
+        def hilo_envio():
+            try:
+                # Leer archivo
+                with open(ruta, "rb") as f:
+                    datos = f.read()
+                # Enviar con barra de progreso
+                send_frame(self.sock, header, datos, progress_callback=update_barra)
+                # Cerrar ventana al terminar
+                win.destroy()
 
-            # Log local
-            self._log_local(f"[ARCHIVO] Yo -> {destino}: '{filename}' ({tam} bytes)\n")
-
-        except Exception as e:
-            win.destroy()
-            messagebox.showerror("Error", f"No se pudo enviar el archivo: {e}")
+                # Log local
+                self.master.after(
+                    0,
+                    lambda: self._log_local(
+                        f"[ARCHIVO] Yo -> {destino}: '{filename}' ({tam} bytes)\n"
+                    ),
+                )
+                
+            except Exception as e:
+                win.destroy()
+                messagebox.showerror("Error", f"No se pudo enviar el archivo: {e}")
+        
+        threading.Thread(target=hilo_envio, daemon=True).start()
 
     def _crear_barra_progreso(self, titulo="Enviando archivo..."):
         win = Toplevel(self.master)
