@@ -1,16 +1,20 @@
 # chat_client_gui_files.py
-import socket
-import threading
-import queue
 import json
-import struct
 import os
+import queue
+import socket
+import struct
+import threading
 import tkinter as tk
-from tkinter import scrolledtext, messagebox, filedialog
-from playsound import playsound
-from PIL import Image, ImageTk
+from tkinter import Toplevel, filedialog, messagebox, scrolledtext, ttk
+
 from audio_manager import AudioManager
+<<<<<<< HEAD
 from emoji_manager import mostrar_paleta_emojis
+=======
+from PIL import Image, ImageTk
+from playsound import playsound
+>>>>>>> a72dff9f8953045c80b0c9433ad36f86090b6031
 
 HOST_DEFECTO = "127.0.0.1"
 PORT_DEFECTO = 65436
@@ -22,13 +26,38 @@ os.makedirs(CARPETA_DESCARGAS, exist_ok=True)
 
 # ==== Utilidades de framing ====
 
-def send_frame(sock: socket.socket, header: dict, payload: bytes = b""):
+
+def send_frame(
+    sock: socket.socket,
+    header: dict,
+    payload: bytes = b"",
+    progress_callback=None,
+    chunk_size=4096,
+):
+    # Enviar header como siempre
     header_bytes = json.dumps(header).encode("utf-8")
     header_len = len(header_bytes)
+
     sock.sendall(struct.pack("!I", header_len))
     sock.sendall(header_bytes)
-    if payload:
-        sock.sendall(payload)
+
+    # Enviar payload en chunks para que haya progreso
+    if not payload:
+        return
+
+    total = len(payload)
+    enviado = 0
+
+    # Enviar en bloques
+    for i in range(0, total, chunk_size):
+        chunk = payload[i : i + chunk_size]
+        sock.sendall(chunk)
+        enviado += len(chunk)
+
+        # Actualizar barra si existe callback
+        if progress_callback:
+            porcentaje = int((enviado / total) * 100)
+            progress_callback(porcentaje)
 
 
 def recv_exact(sock: socket.socket, n: int) -> bytes:
@@ -63,7 +92,7 @@ class ChatClientGUI:
         self.master = master
         self.master.title("SuperVillano Chat")
 
-        self.imagenes_chat = []   # evitar que el GC borre las imágenes
+        self.imagenes_chat = []  # evitar que el GC borre las imágenes
 
         # Estado de red
         self.sock = None
@@ -95,7 +124,9 @@ class ChatClientGUI:
         self.entry_user = tk.Entry(frame_conn, width=12)
         self.entry_user.grid(row=0, column=5, padx=3)
 
-        self.btn_conectar = tk.Button(frame_conn, text="Conectar", command=self.conectar)
+        self.btn_conectar = tk.Button(
+            frame_conn, text="Conectar", command=self.conectar
+        )
         self.btn_conectar.grid(row=0, column=6, padx=5)
 
         # ---- UI principal: lista usuarios + chat ----
@@ -114,7 +145,9 @@ class ChatClientGUI:
         frame_chat = tk.Frame(frame_main)
         frame_chat.pack(side="left", fill="both", expand=True, padx=(10, 0))
 
-        self.text_chat = scrolledtext.ScrolledText(frame_chat, state="disabled", width=60, height=20)
+        self.text_chat = scrolledtext.ScrolledText(
+            frame_chat, state="disabled", width=60, height=20
+        )
         self.text_chat.pack(fill="both", expand=True)
 
         # Campo mensaje + botones
@@ -125,6 +158,7 @@ class ChatClientGUI:
         self.entry_msg.pack(side="left", fill="x", expand=True)
         self.entry_msg.bind("<Return>", self.enviar_texto_evento)
 
+<<<<<<< HEAD
         emoji_button = tk.Button(
             frame_bottom, 
             text="😊", 
@@ -134,15 +168,31 @@ class ChatClientGUI:
         emoji_button.pack(side=tk.LEFT, padx=5)
 
         self.btn_enviar = tk.Button(frame_bottom, text="Enviar mensaje", command=self.enviar_texto)
+=======
+        self.btn_enviar = tk.Button(
+            frame_bottom, text="Enviar mensaje", command=self.enviar_texto
+        )
+>>>>>>> a72dff9f8953045c80b0c9433ad36f86090b6031
         self.btn_enviar.pack(side="left", padx=5)
 
-        self.btn_archivo = tk.Button(frame_bottom, text="Enviar archivo", command=self.enviar_archivo)
+        self.btn_archivo = tk.Button(
+            frame_bottom, text="Enviar archivo", command=self.enviar_archivo
+        )
         self.btn_archivo.pack(side="left", padx=5)
 
-        self.btn_grabar_audio = tk.Button(frame_bottom, text="Grabar audio", command=self.audio_manager.start_recording)
+        self.btn_grabar_audio = tk.Button(
+            frame_bottom,
+            text="Grabar audio",
+            command=self.audio_manager.start_recording,
+        )
         self.btn_grabar_audio.pack(side="left", padx=5)
 
-        self.btn_detener_audio = tk.Button(frame_bottom, text="Detener grabación", command=self._detener_grabacion_audio, state="disabled")   
+        self.btn_detener_audio = tk.Button(
+            frame_bottom,
+            text="Detener grabación",
+            command=self._detener_grabacion_audio,
+            state="disabled",
+        )
         self.btn_detener_audio.pack(side="left", padx=5)
 
         # Timer para procesar colas
@@ -185,7 +235,9 @@ class ChatClientGUI:
             btn_play = tk.Button(
                 self.text_chat,
                 text="Reproducir",
-                command=lambda r=ruta: self.audio_manager.reproducir_audio(r, self._log_local),
+                command=lambda r=ruta: self.audio_manager.reproducir_audio(
+                    r, self._log_local
+                ),
                 relief="raised",
                 bd=1,
                 padx=4,
@@ -207,7 +259,7 @@ class ChatClientGUI:
 
     def _abrir_imagen(self, ruta):
         try:
-            if os.name == "nt":  
+            if os.name == "nt":
                 # Windows
                 os.startfile(ruta)
             else:
@@ -273,7 +325,7 @@ class ChatClientGUI:
                     destino = header.get("to")
                     msg = header.get("message", "")
                     self.cola_mensajes.put(f"{remitente} -> {destino}: {msg}\n")
-                    playsound('notif.wav')
+                    playsound("notif.wav")
 
                 elif mtype == "file" or mtype == "audio":
                     remitente = header.get("from")
@@ -305,7 +357,7 @@ class ChatClientGUI:
                     else:
                         # Mensaje normal
                         self.cola_mensajes.put(("file", ruta, remitente, filename))
-                    playsound('notif.wav')
+                    playsound("notif.wav")
 
                 elif mtype == "system":
                     msg = header.get("message", "")
@@ -325,11 +377,16 @@ class ChatClientGUI:
     def _obtener_destinatario(self):
         seleccion = self.listbox_users.curselection()
         if not seleccion:
-            messagebox.showwarning("Chat", "Selecciona un usuario en la lista para enviarle un mensaje/archivo.")
+            messagebox.showwarning(
+                "Chat",
+                "Selecciona un usuario en la lista para enviarle un mensaje/archivo.",
+            )
             return None
         usuario = self.listbox_users.get(seleccion[0])
         if usuario == self.username:
-            if not messagebox.askyesno("Chat", "Seleccionaste tu propio usuario. ¿Quieres continuar?"):
+            if not messagebox.askyesno(
+                "Chat", "Seleccionaste tu propio usuario. ¿Quieres continuar?"
+            ):
                 return None
         return usuario
 
@@ -379,7 +436,6 @@ class ChatClientGUI:
         ruta = filedialog.askopenfilename(title="Selecciona un archivo para enviar")
         if not ruta:
             return
-
         try:
             tam = os.path.getsize(ruta)
             filename = os.path.basename(ruta)
@@ -388,7 +444,10 @@ class ChatClientGUI:
             return
 
         if tam == 0:
-            if not messagebox.askyesno("Archivo vacío", "El archivo mide 0 bytes. ¿Deseas enviarlo de todos modos?"):
+            if not messagebox.askyesno(
+                "Archivo vacío",
+                "El archivo mide 0 bytes. ¿Deseas enviarlo de todos modos?",
+            ):
                 return
 
         header = {
@@ -399,13 +458,41 @@ class ChatClientGUI:
             "filesize": tam,
         }
 
+        # Crear ventana de progreso
+        win, barra = self._crear_barra_progreso("Enviando archivo...")
+
+        def update_barra(p):
+            barra["value"] = p
+            barra.update_idletasks()
+
         try:
+            # Leer archivo
             with open(ruta, "rb") as f:
                 datos = f.read()
-            send_frame(self.sock, header, datos)
+            # Enviar con barra de progreso
+            send_frame(self.sock, header, datos, progress_callback=update_barra)
+            # Cerrar ventana al terminar
+            win.destroy()
+
+            # Log local
             self._log_local(f"[ARCHIVO] Yo -> {destino}: '{filename}' ({tam} bytes)\n")
-        except OSError as e:
+
+        except Exception as e:
+            win.destroy()
             messagebox.showerror("Error", f"No se pudo enviar el archivo: {e}")
+
+    def _crear_barra_progreso(self, titulo="Enviando archivo..."):
+        win = Toplevel(self.master)
+        win.title(titulo)
+        win.geometry("300x80")
+
+        barra = ttk.Progressbar(
+            win, orient="horizontal", length=250, mode="determinate"
+        )
+        barra.pack(pady=20)
+
+        win.update_idletasks()
+        return win, barra
 
     def _handle_iniciar_grabacion_audio(self):
         if not self.conectado or not self.sock:
@@ -422,23 +509,29 @@ class ChatClientGUI:
             return
         destino = self._obtener_destinatario()
         if not destino:
-            self.audio_manager.grabando = False 
+            self.audio_manager.grabando = False
             self.actualizar_botones_audio(False)
-            messagebox.showwarning("Chat", "Audio no enviado: No se seleccionó destinatario.")
+            messagebox.showwarning(
+                "Chat", "Audio no enviado: No se seleccionó destinatario."
+            )
             return
         self.audio_manager.stop_recording(
             destino,
             self.username,
-            send_frame_func=lambda header, payload=b"": send_frame(self.sock, header, payload),
-            log_local_func=self._log_local
+            send_frame_func=lambda header, payload=b"": send_frame(
+                self.sock, header, payload
+            ),
+            log_local_func=self._log_local,
         )
-    
+
     def actualizar_botones_audio(self, grabando: bool):
         if grabando:
             self.btn_grabar_audio.config(state="disabled")
             self.btn_detener_audio.config(state="normal")
         else:
-            self.btn_grabar_audio.config(state=tk.NORMAL if self.conectado else tk.DISABLED)
+            self.btn_grabar_audio.config(
+                state=tk.NORMAL if self.conectado else tk.DISABLED
+            )
             self.btn_detener_audio.config(state="disabled")
 
     # ========= GUI helpers =========
@@ -464,11 +557,15 @@ class ChatClientGUI:
 
                     elif tipo == "file":
                         _, ruta, remitente, filename = item
-                        self._log_local(f"[ARCHIVO] {remitente} envió {filename}. Guardado en: {ruta}\n")
-                    
+                        self._log_local(
+                            f"[ARCHIVO] {remitente} envió {filename}. Guardado en: {ruta}\n"
+                        )
+
                     elif tipo == "audio":
                         _, ruta, remitente, filename = item
-                        self._log_local(f"[AUDIO] {remitente} envió {filename}. Guardado en: {ruta}\n")
+                        self._log_local(
+                            f"[AUDIO] {remitente} envió {filename}. Guardado en: {ruta}\n"
+                        )
                         self.boton_reproducir_audio(ruta)
 
                 else:
