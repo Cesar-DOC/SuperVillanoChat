@@ -565,37 +565,68 @@ class ChatClientGUI:
     # ========= GUI helpers =========
 
     def _log_local(self, texto: str):
-        self.text_chat.config(state="normal")
-        
+        """
+        Inserta el texto en el chat de forma robusta incluso si hay imágenes,
+        botones u otros widgets que rompen tk.END.
+        """
         import re
-        patron = r"^([A-Za-z0-9_]+)"   # primera palabra del mensaje
-        match = re.match(patron, texto)
+        import random
+        import traceback
 
-        if match:
-            usuario = match.group(1)
+        print("RECIBIDO EN LOG:", repr(texto))
 
-            # asignar color si aún no existe
-            if usuario not in self.colores_usuarios:
-                import random
-                self.colores_usuarios[usuario] = random.choice(self.colores_base)
+        try:
+            self.text_chat.config(state="normal")
 
-            color = self.colores_usuarios[usuario]
+            # REGEX que detecta nombre al inicio
+            patron = r"^\s*(?:\[[^\]]+\]\s*)*([A-Za-z0-9_]+)\s*->"
+            m = re.match(patron, texto)
 
-            inicio = self.text_chat.index(tk.END)
-            self.text_chat.insert(tk.END, usuario)
-            fin = self.text_chat.index(tk.END)
+            # Índice seguro del final real del texto
+            safe_end = self.text_chat.index("end-1c")
 
-            self.text_chat.tag_add(usuario, inicio, fin)
-            self.text_chat.tag_config(usuario, foreground=color)
+            if m:
+                nombre = m.group(1)
 
-            # insertar resto del texto
-            self.text_chat.insert(tk.END, texto[len(usuario):])
+                # asignar color si no existe
+                if nombre not in self.colores_usuarios:
+                    color = random.choice(self.colores_base)
+                    tag = f"tag_{nombre}"
+                    self.colores_usuarios[nombre] = {"color": color, "tag": tag}
+                    self.text_chat.tag_config(tag, foreground=color, font=("Arial", 10, "bold"))
+                else:
+                    color = self.colores_usuarios[nombre]["color"]
+                    tag = self.colores_usuarios[nombre]["tag"]
 
-        else:
-            self.text_chat.insert(tk.END, texto)
+                # dividir texto en partes
+                idx = texto.find(nombre)
+                pref = texto[:idx]
+                nom = nombre
+                suf = texto[idx + len(nombre):]
 
-        self.text_chat.see(tk.END)
-        self.text_chat.config(state="disabled")
+                # insertar prefijo
+                if pref:
+                    self.text_chat.insert(safe_end, pref)
+
+                # insertar nombre con color
+                start = self.text_chat.index("end-1c")
+                self.text_chat.insert(start, nom)
+                end = self.text_chat.index("end-1c")
+                self.text_chat.tag_add(tag, start, end)
+
+                # insertar sufijo
+                self.text_chat.insert("end-1c", suf)
+
+            else:
+                # sin nombre, inserción directa
+                self.text_chat.insert(safe_end, texto)
+
+            self.text_chat.see("end")
+            self.text_chat.config(state="disabled")
+
+        except Exception as e:
+            print("ERROR en _log_local:", e)
+            traceback.print_exc()
 
     # Procesar colas
     def procesar_colas(self):
