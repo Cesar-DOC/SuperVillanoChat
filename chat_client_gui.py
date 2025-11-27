@@ -148,6 +148,20 @@ class ChatClientGUI:
         )
         self.text_chat.pack(fill="both", expand=True)
 
+        # Buscador de mensajes
+        frame_search = tk.Frame(frame_chat)
+        frame_search.pack(fill="x", pady=(5, 0))
+
+        tk.Label(frame_search, text="Buscar:").pack(side="left")
+        self.entry_search = tk.Entry(frame_search)
+        self.entry_search.pack(side="left", fill="x", expand=True)
+        self.entry_search.bind("<KeyRelease>", self.buscar_mensajes)
+
+        self.btn_clear_search = tk.Button(
+            frame_search, text="Limpiar", command=self.limpiar_busqueda
+        )
+        self.btn_clear_search.pack(side="left", padx=5)
+
         # Campo mensaje + botones
         frame_bottom = tk.Frame(master)
         frame_bottom.pack(padx=10, pady=5, fill="x")
@@ -155,7 +169,7 @@ class ChatClientGUI:
         self.entry_msg = tk.Entry(frame_bottom)
         self.entry_msg.pack(side="left", fill="x", expand=True)
         self.entry_msg.bind("<Return>", self.enviar_texto_evento)
-
+        
         emoji_button = tk.Button(
             frame_bottom, 
             text="😊", 
@@ -167,7 +181,7 @@ class ChatClientGUI:
         self.btn_enviar = tk.Button(
             frame_bottom, text="Enviar mensaje", command=self.enviar_texto
         )
-
+        
         self.btn_enviar.pack(side="left", padx=5)
 
         self.btn_archivo = tk.Button(
@@ -190,12 +204,22 @@ class ChatClientGUI:
         )
         self.btn_detener_audio.pack(side="left", padx=5)
 
+        # Paleta de colores para los nombres de los usuarios
+        import random
+        self.colores_usuarios = {}
+        self.colores_base = [
+            "#FF7F7F", "#FFBF7F", "#FFFF7F", "#7FFF7F", "#7FFFFF",
+            "#7F7FFF", "#BF7FFF", "#FF7FFF", "#FF99C8", "#C8F9FF",
+            "#A5FFAF", "#FFD1A5", "#B5A5FF", "#FFA5E2"
+        ]
+
         # Timer para procesar colas
         self.master.after(100, self.procesar_colas)
 
         # Cierre ordenado
         self.master.protocol("WM_DELETE_WINDOW", self.cerrar)
 
+    # imagenes
     def _insertar_imagen_chat(self, ruta):
         try:
             # Cargar y crear la miniatura para la vista previa
@@ -460,7 +484,7 @@ class ChatClientGUI:
             barra["value"] = p
             barra.update_idletasks()
 
-        # --- MOVER ENVRIO A UN HILO ---
+        # --- MOVER ENVIO A UN HILO ---
         def hilo_envio():
             try:
                 # Leer archivo
@@ -478,11 +502,11 @@ class ChatClientGUI:
                         f"[ARCHIVO] Yo -> {destino}: '{filename}' ({tam} bytes)\n"
                     ),
                 )
-                
+
             except Exception as e:
                 win.destroy()
                 messagebox.showerror("Error", f"No se pudo enviar el archivo: {e}")
-        
+
         threading.Thread(target=hilo_envio, daemon=True).start()
 
     def _crear_barra_progreso(self, titulo="Enviando archivo..."):
@@ -537,15 +561,43 @@ class ChatClientGUI:
                 state=tk.NORMAL if self.conectado else tk.DISABLED
             )
             self.btn_detener_audio.config(state="disabled")
-
+  
     # ========= GUI helpers =========
 
     def _log_local(self, texto: str):
         self.text_chat.config(state="normal")
-        self.text_chat.insert(tk.END, texto)
+        
+        import re
+        patron = r"^([A-Za-z0-9_]+)"   # primera palabra del mensaje
+        match = re.match(patron, texto)
+
+        if match:
+            usuario = match.group(1)
+
+            # asignar color si aún no existe
+            if usuario not in self.colores_usuarios:
+                import random
+                self.colores_usuarios[usuario] = random.choice(self.colores_base)
+
+            color = self.colores_usuarios[usuario]
+
+            inicio = self.text_chat.index(tk.END)
+            self.text_chat.insert(tk.END, usuario)
+            fin = self.text_chat.index(tk.END)
+
+            self.text_chat.tag_add(usuario, inicio, fin)
+            self.text_chat.tag_config(usuario, foreground=color)
+
+            # insertar resto del texto
+            self.text_chat.insert(tk.END, texto[len(usuario):])
+
+        else:
+            self.text_chat.insert(tk.END, texto)
+
         self.text_chat.see(tk.END)
         self.text_chat.config(state="disabled")
 
+    # Procesar colas
     def procesar_colas(self):
         # Mensajes de chat
         try:
@@ -592,6 +644,30 @@ class ChatClientGUI:
 
         self.master.after(100, self.procesar_colas)
 
+    # Buscador de mensajes
+    def buscar_mensajes(self, event=None):
+        texto = self.entry_search.get().strip()
+        self.text_chat.tag_remove("search", "1.0", tk.END)
+
+        if not texto:
+            return
+
+        idx = "1.0"
+        while True:
+            idx = self.text_chat.search(texto, idx, nocase=1, stopindex=tk.END)
+            if not idx:
+                break
+            fin = f"{idx}+{len(texto)}c"
+            self.text_chat.tag_add("search", idx, fin)
+            idx = fin
+
+        self.text_chat.tag_config("search", background="yellow", foreground="black")
+
+    def limpiar_busqueda(self):
+        self.entry_search.delete(0, tk.END)
+        self.text_chat.tag_remove("search", "1.0", tk.END)
+
+    # Cerrar
     def cerrar(self):
         self.conectado = False
         # audio_manager.close() no existe; usar terminate()
