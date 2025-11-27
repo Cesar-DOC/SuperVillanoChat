@@ -8,9 +8,10 @@ import threading
 import tkinter as tk
 from tkinter import Toplevel, filedialog, messagebox, scrolledtext, ttk
 
-from audio_manager import AudioManager
 from PIL import Image, ImageTk
 from playsound3 import playsound
+
+from audio_manager import AudioManager
 
 HOST_DEFECTO = "127.0.0.1"
 PORT_DEFECTO = 65436
@@ -309,7 +310,7 @@ class ChatClientGUI:
                     destino = header.get("to")
                     msg = header.get("message", "")
                     self.cola_mensajes.put(f"{remitente} -> {destino}: {msg}\n")
-                    playsound("notif.wav")
+                    self.audio_manager.reproducir_audio("notif.wav", self._log_local)
 
                 elif mtype == "file" or mtype == "audio":
                     remitente = header.get("from")
