@@ -167,7 +167,7 @@ class ChatClientGUI:
         self.btn_enviar = tk.Button(
             frame_bottom, text="Enviar mensaje", command=self.enviar_texto
         )
->>>>>>> a72dff9f8953045c80b0c9433ad36f86090b6031
+
         self.btn_enviar.pack(side="left", padx=5)
 
         self.btn_archivo = tk.Button(
