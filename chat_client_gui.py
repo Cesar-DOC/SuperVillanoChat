@@ -10,6 +10,7 @@ from tkinter import scrolledtext, messagebox, filedialog
 from playsound import playsound
 from PIL import Image, ImageTk
 from audio_manager import AudioManager
+from emoji_manager import mostrar_paleta_emojis
 
 HOST_DEFECTO = "127.0.0.1"
 PORT_DEFECTO = 65436
@@ -123,6 +124,14 @@ class ChatClientGUI:
         self.entry_msg = tk.Entry(frame_bottom)
         self.entry_msg.pack(side="left", fill="x", expand=True)
         self.entry_msg.bind("<Return>", self.enviar_texto_evento)
+
+        emoji_button = tk.Button(
+            frame_bottom, 
+            text="😊", 
+            command=lambda: mostrar_paleta_emojis(self),
+            font=("Arial", 14)
+        )
+        emoji_button.pack(side=tk.LEFT, padx=5)
 
         self.btn_enviar = tk.Button(frame_bottom, text="Enviar mensaje", command=self.enviar_texto)
         self.btn_enviar.pack(side="left", padx=5)
