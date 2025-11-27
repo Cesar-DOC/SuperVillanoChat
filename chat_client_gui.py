@@ -7,14 +7,10 @@ import struct
 import threading
 import tkinter as tk
 from tkinter import Toplevel, filedialog, messagebox, scrolledtext, ttk
-
-from audio_manager import AudioManager
-<<<<<<< HEAD
-from emoji_manager import mostrar_paleta_emojis
-=======
 from PIL import Image, ImageTk
-from playsound import playsound
->>>>>>> a72dff9f8953045c80b0c9433ad36f86090b6031
+from playsound3 import playsound
+from audio_manager import AudioManager
+from emoji_manager import mostrar_paleta_emojis
 
 HOST_DEFECTO = "127.0.0.1"
 PORT_DEFECTO = 65436
@@ -88,6 +84,8 @@ def recv_frame(sock: socket.socket):
 
 
 class ChatClientGUI:
+
+
     def __init__(self, master):
         self.master = master
         self.master.title("SuperVillano Chat")
@@ -158,7 +156,6 @@ class ChatClientGUI:
         self.entry_msg.pack(side="left", fill="x", expand=True)
         self.entry_msg.bind("<Return>", self.enviar_texto_evento)
 
-<<<<<<< HEAD
         emoji_button = tk.Button(
             frame_bottom, 
             text="😊", 
@@ -167,8 +164,6 @@ class ChatClientGUI:
         )
         emoji_button.pack(side=tk.LEFT, padx=5)
 
-        self.btn_enviar = tk.Button(frame_bottom, text="Enviar mensaje", command=self.enviar_texto)
-=======
         self.btn_enviar = tk.Button(
             frame_bottom, text="Enviar mensaje", command=self.enviar_texto
         )
@@ -325,7 +320,7 @@ class ChatClientGUI:
                     destino = header.get("to")
                     msg = header.get("message", "")
                     self.cola_mensajes.put(f"{remitente} -> {destino}: {msg}\n")
-                    playsound("notif.wav")
+                    self.audio_manager.reproducir_audio("notif.wav", self._log_local)
 
                 elif mtype == "file" or mtype == "audio":
                     remitente = header.get("from")
@@ -357,7 +352,7 @@ class ChatClientGUI:
                     else:
                         # Mensaje normal
                         self.cola_mensajes.put(("file", ruta, remitente, filename))
-                    playsound("notif.wav")
+                    self.audio_manager.reproducir_audio("notif.wav", self._log_local)
 
                 elif mtype == "system":
                     msg = header.get("message", "")
@@ -465,21 +460,30 @@ class ChatClientGUI:
             barra["value"] = p
             barra.update_idletasks()
 
-        try:
-            # Leer archivo
-            with open(ruta, "rb") as f:
-                datos = f.read()
-            # Enviar con barra de progreso
-            send_frame(self.sock, header, datos, progress_callback=update_barra)
-            # Cerrar ventana al terminar
-            win.destroy()
+        # --- MOVER ENVRIO A UN HILO ---
+        def hilo_envio():
+            try:
+                # Leer archivo
+                with open(ruta, "rb") as f:
+                    datos = f.read()
+                # Enviar con barra de progreso
+                send_frame(self.sock, header, datos, progress_callback=update_barra)
+                # Cerrar ventana al terminar
+                win.destroy()
 
-            # Log local
-            self._log_local(f"[ARCHIVO] Yo -> {destino}: '{filename}' ({tam} bytes)\n")
-
-        except Exception as e:
-            win.destroy()
-            messagebox.showerror("Error", f"No se pudo enviar el archivo: {e}")
+                # Log local
+                self.master.after(
+                    0,
+                    lambda: self._log_local(
+                        f"[ARCHIVO] Yo -> {destino}: '{filename}' ({tam} bytes)\n"
+                    ),
+                )
+                
+            except Exception as e:
+                win.destroy()
+                messagebox.showerror("Error", f"No se pudo enviar el archivo: {e}")
+        
+        threading.Thread(target=hilo_envio, daemon=True).start()
 
     def _crear_barra_progreso(self, titulo="Enviando archivo..."):
         win = Toplevel(self.master)
