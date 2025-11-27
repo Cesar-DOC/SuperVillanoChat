@@ -84,6 +84,8 @@ def recv_frame(sock: socket.socket):
 
 
 class ChatClientGUI:
+
+
     def __init__(self, master):
         self.master = master
         self.master.title("SuperVillano Chat")
@@ -349,7 +351,7 @@ class ChatClientGUI:
                     else:
                         # Mensaje normal
                         self.cola_mensajes.put(("file", ruta, remitente, filename))
-                    playsound("notif.wav")
+                    self.audio_manager.reproducir_audio("notif.wav", self._log_local)
 
                 elif mtype == "system":
                     msg = header.get("message", "")
