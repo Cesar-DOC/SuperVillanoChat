@@ -1,0 +1,7 @@
+numpy==2.3.5
+pillow==12.0.0
+playsound==1.2.2
+playsound3==3.3.0
+PyAudio==0.2.14
+pywin32==311
+tk==0.1.0
