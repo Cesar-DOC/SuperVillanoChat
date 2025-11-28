@@ -204,6 +204,14 @@ class ChatClientGUI:
         )
         self.btn_detener_audio.pack(side="left", padx=5)
 
+        self.btn_limpiar_chat = tk.Button(
+            frame_bottom,
+            text="Limpiar chat",
+            command=self.limpiar_chat
+        )
+        self.btn_limpiar_chat.pack(side="left", padx=5)
+
+
         # Paleta de colores para los nombres de los usuarios
         import random
         self.colores_usuarios = {}
@@ -218,6 +226,15 @@ class ChatClientGUI:
 
         # Cierre ordenado
         self.master.protocol("WM_DELETE_WINDOW", self.cerrar)
+
+    def limpiar_chat(self):
+        self.text_chat.config(state="normal")
+        self.text_chat.delete("1.0", tk.END)
+        self.text_chat.config(state="disabled")
+
+        # Limpia también imágenes almacenadas en RAM
+        self.imagenes_chat.clear()
+
 
     # imagenes
     def _insertar_imagen_chat(self, ruta):
