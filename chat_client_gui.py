@@ -5,6 +5,7 @@ import queue
 import socket
 import struct
 import threading
+import time 
 import tkinter as tk
 from tkinter import Toplevel, filedialog, messagebox, scrolledtext, ttk
 from PIL import Image, ImageTk
@@ -332,10 +333,13 @@ class ChatClientGUI:
         self.username = username
 
         # Enviar frame de login
+        ts = time.strftime("%H:%M:%S")
+
         header = {
             "type": "login",
             "from": self.username,
             "to": "SERVER",
+            "timestamp": ts,
         }
         send_frame(self.sock, header)
 
@@ -360,7 +364,8 @@ class ChatClientGUI:
                     remitente = header.get("from")
                     destino = header.get("to")
                     msg = header.get("message", "")
-                    self.cola_mensajes.put(f"{remitente} -> {destino}: {msg}\n")
+                    ts = header.get("timestamp", "??:??")
+                    self.cola_mensajes.put(f"[{ts}] {remitente} -> {destino}: {msg}\n")
                     self.audio_manager.reproducir_audio("notif.wav", self._log_local)
 
                 elif mtype == "file" or mtype == "audio":
@@ -442,17 +447,20 @@ class ChatClientGUI:
         if not texto:
             return
 
+        ts = time.strftime("%H:%M:%S")
+
         header = {
-            "type": "text",
-            "from": self.username,
-            "to": destino,
-            "message": texto,
+        "type": "text",
+        "from": self.username,
+        "to": destino,
+        "message": texto,
+        "timestamp": ts,
         }
 
         try:
             send_frame(self.sock, header)
             # Mostrar en chat local
-            self._log_local(f"Yo -> {destino}: {texto}\n")
+            self._log_local(f"[{ts}] Yo -> {destino}: {texto}\n")
         except OSError as e:
             messagebox.showerror("Error", f"No se pudo enviar el mensaje: {e}")
             self.conectado = False
@@ -486,12 +494,15 @@ class ChatClientGUI:
             ):
                 return
 
+        ts = time.strftime("%H:%M:%S")
+
         header = {
-            "type": "file",
-            "from": self.username,
-            "to": destino,
-            "filename": filename,
-            "filesize": tam,
+           "type": "file",
+           "from": self.username,
+           "to": destino,
+           "filename": filename,
+           "filesize": tam,
+           "timestamp": ts,
         }
 
         # Crear ventana de progreso
@@ -516,7 +527,7 @@ class ChatClientGUI:
                 self.master.after(
                     0,
                     lambda: self._log_local(
-                        f"[ARCHIVO] Yo -> {destino}: '{filename}' ({tam} bytes)\n"
+                        f"[{ts}] [ARCHIVO] Yo -> {destino}: '{filename}' ({tam} bytes)\n"
                     ),
                 )
 
@@ -660,9 +671,9 @@ class ChatClientGUI:
                         self._insertar_imagen_chat(ruta)
 
                     elif tipo == "file":
-                        _, ruta, remitente, filename = item
+                        _, ruta, remitente, filename, ts = item
                         self._log_local(
-                            f"[ARCHIVO] {remitente} envió {filename}. Guardado en: {ruta}\n"
+                            f"[{ts}] [ARCHIVO] {remitente} envió {filename}. Guardado en: {ruta}\n"
                         )
 
                     elif tipo == "audio":

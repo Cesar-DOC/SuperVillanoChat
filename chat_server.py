@@ -3,6 +3,7 @@ import socket
 import threading
 import json
 import struct
+import time
 
 HOST = "0.0.0.0"
 PORT = 65436
@@ -102,11 +103,13 @@ def manejar_cliente(sock: socket.socket, addr):
         while True:
             header, payload = recv_frame(sock)
             mtype = header.get("type")
+            if "timestamp" not in header:
+                header["timestamp"] = time.strftime("%H:%M:%S")
 
             if mtype == "text":
                 destino = header.get("to")
                 mensaje = header.get("message", "")
-                print(f"[MSG] {username} -> {destino}: {mensaje}")
+                print(f"[{header.get('timestamp')}] [MSG] {username} -> {destino}: {mensaje}")
 
                 with lock:
                     if destino == "Todos":
@@ -131,8 +134,7 @@ def manejar_cliente(sock: socket.socket, addr):
             elif mtype == "file" or mtype == "audio":
                 destino = header.get("to")
                 filename = header.get("filename", "archivo")
-                print(f"[{mtype.upper()}] {username} -> {destino}: {filename}")
-
+                pprint(f"[{header.get('timestamp')}] [{mtype.upper()}] {username} -> {destino}: {filename}")
                 with lock:
                     if destino == "Todos":
                         # Enviar a todos excepto al remitente
