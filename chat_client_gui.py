@@ -1,6 +1,8 @@
 # chat_client_gui_files.py
+from asyncio import subprocess
 import json
 import os
+import platform
 import queue
 import socket
 import struct
@@ -170,6 +172,21 @@ class ChatClientGUI:
         self.entry_msg = tk.Entry(frame_bottom)
         self.entry_msg.pack(side="left", fill="x", expand=True)
         self.entry_msg.bind("<Return>", self.enviar_texto_evento)
+        
+        # Menú de opciones
+        self.btn_opciones = tk.Button(
+            frame_conn, 
+            text="⚙️ Opciones", 
+            command=self._mostrar_menu_opciones
+        )
+        self.btn_opciones.grid(row=0, column=7, padx=5)
+        
+        self.menu_opciones = tk.Menu(self.master, tearoff=0)
+        self.menu_opciones.add_command(
+            label="📂 Abrir carpeta de descargas", 
+            command=self.abrir_carpeta_descargas
+        )
+        
         
         emoji_button = tk.Button(
             frame_bottom, 
@@ -589,6 +606,34 @@ class ChatClientGUI:
                 state=tk.NORMAL if self.conectado else tk.DISABLED
             )
             self.btn_detener_audio.config(state="disabled")
+            
+    # Menú de opciones
+    def _mostrar_menu_opciones(self):
+        x = self.btn_opciones.winfo_rootx()
+        y = self.btn_opciones.winfo_rooty() + self.btn_opciones.winfo_height()
+        
+        self.menu_opciones.tk_popup(x, y)
+        self.menu_opciones.grab_release()
+        
+    def abrir_carpeta_descargas(self):
+        ruta = os.path.abspath(CARPETA_DESCARGAS)
+        
+        try:
+            sistema = platform.system()
+            
+            # Windows
+            if sistema == "Windows":
+                os.startfile(ruta)
+            # MacOS
+            elif sistema == "Darwin":  
+                subprocess.Popen(["open", ruta])
+            # Linux
+            else:  
+                subprocess.Popen(["xdg-open", ruta])
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir la carpeta: {e}")
+        
   
     # ========= GUI helpers =========
 
