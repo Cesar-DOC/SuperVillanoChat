@@ -107,6 +107,9 @@ class ChatClientGUI:
         # Cola para updates de userlist (lista de strings)
         self.cola_userlist = queue.Queue()
 
+        # Modo oscuro
+        self.modo_oscuro = False
+
         # ---- UI conexión ----
         frame_conn = tk.Frame(master)
         frame_conn.pack(padx=10, pady=5, fill="x")
@@ -186,7 +189,10 @@ class ChatClientGUI:
             label="📂 Abrir carpeta de descargas", 
             command=self.abrir_carpeta_descargas
         )
-        
+        self.menu_opciones.add_command(
+            label="Modo oscuro",
+            command=self.toggle_modo
+        )
         
         emoji_button = tk.Button(
             frame_bottom, 
@@ -244,6 +250,36 @@ class ChatClientGUI:
 
         # Cierre ordenado
         self.master.protocol("WM_DELETE_WINDOW", self.cerrar)
+
+    def toggle_modo(self):
+        if not self.modo_oscuro:
+            # Activar modo oscuro
+            self._actualizar_estilos(self.master, oscuro=True)
+            self.menu_opciones.entryconfig(1, label="Activar modo claro")
+            self.modo_oscuro = True
+        else:
+            # Volver a modo claro
+            self._actualizar_estilos(self.master, oscuro=False)
+            self.menu_opciones.entryconfig(1, label="Activar modo oscuro")
+            self.modo_oscuro = False
+
+    def _actualizar_estilos(self, widget, oscuro):
+        bg = "#2e2e2e" if oscuro else "SystemButtonFace"
+        fg = "white" if oscuro else "black"
+
+        # Intenta aplicar colores al widget
+        try:
+            widget.configure(bg=bg, fg=fg)
+        except:
+            try:
+                widget.configure(bg=bg)  # algunos widgets no tienen 'fg'
+            except:
+                pass
+
+        # Recorre hijos (frames, botones, labels, etc.)
+        for child in widget.winfo_children():
+            self._actualizar_estilos(child, oscuro)
+
 
     def limpiar_chat(self):
         self.text_chat.config(state="normal")
