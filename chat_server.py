@@ -130,7 +130,30 @@ def manejar_cliente(sock: socket.socket, addr):
                                 "message": f"Usuario '{destino}' no existe o no está conectado.",
                             }
                             send_frame(sock, err)
+            elif mtype == "pin":
+                destino = header.get("to")
+                print(f"[PIN] {username} fijó un mensaje para {destino}")
 
+                with lock:
+                    if destino == "Todos":
+                        # Enviar a todos excepto al remitente
+                        for user, dest_sock in usuarios.items():
+                            if user != username and user != "Todos":
+                                send_frame(dest_sock, header)
+                    else:
+                        dest_sock = usuarios.get(destino)
+                        if dest_sock:
+                            send_frame(dest_sock, header)
+                        else:
+                            # Usuario no encontrado → enviar error al remitente
+                            err = {
+                                "type": "system",
+                                "from": "SERVER",
+                                "to": username,
+                                "message": f"No se pudo fijar el mensaje. Usuario '{destino}' no está conectado."
+                            }
+                            send_frame(sock, err)
+            
             elif mtype == "file" or mtype == "audio":
                 destino = header.get("to")
                 filename = header.get("filename", "archivo")
