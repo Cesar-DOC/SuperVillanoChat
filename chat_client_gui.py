@@ -154,6 +154,21 @@ class ChatClientGUI:
         )
         self.text_chat.pack(fill="both", expand=True)
 
+        # Configurar tag y binding UNA vez (más robusto y eficiente)
+        self.text_chat.tag_config("msg", underline=False)  # configuración mínima del tag
+        self.text_chat.tag_bind("msg", "<Double-1>", self.fijar_mensaje)
+
+        # ====== BARRA DE MENSAJE FIJADO ======
+        self.label_fijado = tk.Label(
+            frame_chat,
+            text="",
+            bg="#ffe08c",
+            font=("Arial", 10, "bold"),
+            anchor="w"
+        )
+        self.label_fijado.pack(fill="x")
+        self.text_chat.pack(fill="both", expand=True)
+        
         # Buscador de mensajes
         frame_search = tk.Frame(frame_chat)
         frame_search.pack(fill="x", pady=(5, 0))
@@ -713,19 +728,34 @@ class ChatClientGUI:
                 nom = nombre
                 suf = texto[idx + len(nombre):]
 
+                # ===== Inserción robusta con tagging por número de línea =====
+                # Guardar número de línea inicial (antes de insertar)
+                start_line_no = int(self.text_chat.index("end-1c").split(".")[0])
+                
                 # insertar prefijo
                 if pref:
-                    self.text_chat.insert(safe_end, pref)
+                    self.text_chat.insert("end", pref)
 
                 # insertar nombre con color
                 start = self.text_chat.index("end-1c")
-                self.text_chat.insert(start, nom)
+                self.text_chat.insert("end-1c", nom)
                 end = self.text_chat.index("end-1c")
-                self.text_chat.tag_add(tag, start, end)
+                self.text_chat.tag_add(tag, start_name, end_name)
 
                 # insertar sufijo
-                self.text_chat.insert("end-1c", suf)
+                self.text_chat.insert("end", suf)
 
+                # Obtener número de línea final (después de insertar)
+                end_line_no = int(self.text_chat.index("end-1c").split(".")[0])
+
+                # Crear tag que cubra desde la primera línea hasta la última de lo insertado
+                line_start = f"{start_line_no}.0"
+                line_end   = f"{end_line_no}.end"
+                self.text_chat.tag_add("msg", line_start, line_end)
+                # (NO llamamos tag_bind aquí porque ya se hizo en __init__)
+
+                # Asegurar el doble click
+                self.text_chat.tag_bind("msg", "<Double-1>", self.fijar_mensaje)
             else:
                 # sin nombre, inserción directa
                 self.text_chat.insert(safe_end, texto)
@@ -806,7 +836,19 @@ class ChatClientGUI:
     def limpiar_busqueda(self):
         self.entry_search.delete(0, tk.END)
         self.text_chat.tag_remove("search", "1.0", tk.END)
+        
+    def fijar_mensaje(self, event):
+        try:
+            # posición exacta del clic
+            idx = self.text_chat.index(f"@{event.x},{event.y}")
 
+            # leer línea completa del clic
+            linea = self.text_chat.get(f"{idx} linestart", f"{idx} lineend")
+
+            self.label_fijado.config(text="📌 " + linea)
+
+        except Exception as e:
+            print("ERROR EN fijar_mensaje:", e)
     # Cerrar
     def cerrar(self):
         self.conectado = False
