@@ -6,7 +6,7 @@ import socket
 import struct
 import threading
 import tkinter as tk
-from tkinter import Toplevel, filedialog, messagebox, scrolledtext, ttk
+from tkinter import Toplevel, filedialog, messagebox, scrolledtext, ttk, Menu
 from PIL import Image, ImageTk
 from playsound3 import playsound
 from audio_manager import AudioManager
@@ -90,6 +90,25 @@ class ChatClientGUI:
         self.master = master
         self.master.title("SuperVillano Chat")
 
+                # Lista para guardar mensajes fijados
+        self.mensajes_fijados = []
+
+
+                # ==== Menú superior ====
+        barra_menu = Menu(self.master)
+        self.master.config(menu=barra_menu)
+
+        # Menú "Chat" para funciones relacionadas con el chat
+        menu_chat = Menu(barra_menu, tearoff=0)
+        menu_chat.add_command(
+            label="Fijar mensaje seleccionado",
+            command=self.fijar_mensaje
+        )
+
+
+        barra_menu.add_cascade(label="Chat", menu=menu_chat)
+
+
         self.imagenes_chat = []  # evitar que el GC borre las imágenes
 
         # Estado de red
@@ -148,7 +167,7 @@ class ChatClientGUI:
         )
         self.text_chat.pack(fill="both", expand=True)
 
-        # Buscador de mensajes
+                # Buscador de mensajes
         frame_search = tk.Frame(frame_chat)
         frame_search.pack(fill="x", pady=(5, 0))
 
@@ -161,6 +180,21 @@ class ChatClientGUI:
             frame_search, text="Limpiar", command=self.limpiar_busqueda
         )
         self.btn_clear_search.pack(side="left", padx=5)
+
+        # ==== Panel de mensajes fijados ====
+        frame_pinned = tk.Frame(frame_chat)
+        frame_pinned.pack(fill="x", pady=(5, 0))
+
+        tk.Label(frame_pinned, text="Mensajes fijados:").pack(anchor="w")
+
+        self.text_pinned = tk.Text(
+            frame_pinned,
+            height=6,
+            state="disabled",
+            wrap="word"
+        )
+        self.text_pinned.pack(fill="x", expand=False)
+
 
         # Campo mensaje + botones
         frame_bottom = tk.Frame(master)
@@ -627,6 +661,64 @@ class ChatClientGUI:
         except Exception as e:
             print("ERROR en _log_local:", e)
             traceback.print_exc()
+
+    def fijar_mensaje(self):
+        """
+        Fija el texto actualmente seleccionado en el área de chat y lo guarda
+        en una lista interna para poder consultarlo después.
+        """
+        try:
+            # Obtener el texto seleccionado en el widget de chat
+            texto_sel = self.text_chat.get(tk.SEL_FIRST, tk.SEL_LAST).strip()
+        except tk.TclError:
+            messagebox.showinfo(
+                "Fijar mensaje",
+                "Selecciona primero el mensaje o texto que quieras fijar."
+            )
+            return
+
+        if not texto_sel:
+            messagebox.showinfo(
+                "Fijar mensaje",
+                "El texto seleccionado está vacío."
+            )
+            return
+
+        # Guardar el texto en la lista de mensajes fijados
+        self.mensajes_fijados.append(texto_sel)
+
+        # Actualizar el panel dentro de la misma ventana
+        self.actualizar_panel_mensajes_fijados()
+
+    def actualizar_panel_mensajes_fijados(self):
+        """
+        Actualiza el contenido del panel de mensajes fijados dentro de la ventana principal.
+        """
+        if not hasattr(self, "text_pinned"):
+            return  # Por si se llama antes de crear el widget
+
+        # Construir el texto a mostrar
+        texto = ""
+        for i, m in enumerate(self.mensajes_fijados, start=1):
+            texto += f"{i}. {m}\n" + "-" * 40 + "\n"
+
+        # Escribir en el Text de mensajes fijados
+        self.text_pinned.config(state="normal")
+        self.text_pinned.delete("1.0", tk.END)
+        if texto:
+            self.text_pinned.insert(tk.END, texto)
+        else:
+            self.text_pinned.insert(tk.END, "No hay mensajes fijados.")
+        self.text_pinned.config(state="disabled")
+
+    def ver_mensajes_fijados(self):
+        """
+        Ya no abre ventanas nuevas. Opcionalmente, puede hacer scroll o dar foco
+        al panel de mensajes fijados. Si quieres, incluso puedes dejar esta función vacía.
+        """
+        # Por ejemplo, hacer foco al panel:
+        if hasattr(self, "text_pinned"):
+            self.text_pinned.focus_set()
 
     # Procesar colas
     def procesar_colas(self):
