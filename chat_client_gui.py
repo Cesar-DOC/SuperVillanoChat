@@ -1,10 +1,13 @@
 # chat_client_gui_files.py
+from asyncio import subprocess
 import json
 import os
+import platform
 import queue
 import socket
 import struct
 import threading
+import time 
 import tkinter as tk
 from tkinter import Toplevel, filedialog, messagebox, scrolledtext, ttk, Menu
 from PIL import Image, ImageTk
@@ -123,6 +126,9 @@ class ChatClientGUI:
         # Cola para updates de userlist (lista de strings)
         self.cola_userlist = queue.Queue()
 
+        # Modo oscuro
+        self.modo_oscuro = False
+
         # ---- UI conexión ----
         frame_conn = tk.Frame(master)
         frame_conn.pack(padx=10, pady=5, fill="x")
@@ -204,6 +210,24 @@ class ChatClientGUI:
         self.entry_msg.pack(side="left", fill="x", expand=True)
         self.entry_msg.bind("<Return>", self.enviar_texto_evento)
         
+        # Menú de opciones
+        self.btn_opciones = tk.Button(
+            frame_conn, 
+            text="⚙️ Opciones", 
+            command=self._mostrar_menu_opciones
+        )
+        self.btn_opciones.grid(row=0, column=7, padx=5)
+        
+        self.menu_opciones = tk.Menu(self.master, tearoff=0)
+        self.menu_opciones.add_command(
+            label="📂 Abrir carpeta de descargas", 
+            command=self.abrir_carpeta_descargas
+        )
+        self.menu_opciones.add_command(
+            label="Modo oscuro",
+            command=self.toggle_modo
+        )
+        
         emoji_button = tk.Button(
             frame_bottom, 
             text="😊", 
@@ -238,6 +262,14 @@ class ChatClientGUI:
         )
         self.btn_detener_audio.pack(side="left", padx=5)
 
+        self.btn_limpiar_chat = tk.Button(
+            frame_bottom,
+            text="Limpiar chat",
+            command=self.limpiar_chat
+        )
+        self.btn_limpiar_chat.pack(side="left", padx=5)
+
+
         # Paleta de colores para los nombres de los usuarios
         import random
         self.colores_usuarios = {}
@@ -252,6 +284,45 @@ class ChatClientGUI:
 
         # Cierre ordenado
         self.master.protocol("WM_DELETE_WINDOW", self.cerrar)
+
+    def toggle_modo(self):
+        if not self.modo_oscuro:
+            # Activar modo oscuro
+            self._actualizar_estilos(self.master, oscuro=True)
+            self.menu_opciones.entryconfig(1, label="Activar modo claro")
+            self.modo_oscuro = True
+        else:
+            # Volver a modo claro
+            self._actualizar_estilos(self.master, oscuro=False)
+            self.menu_opciones.entryconfig(1, label="Activar modo oscuro")
+            self.modo_oscuro = False
+
+    def _actualizar_estilos(self, widget, oscuro):
+        bg = "#2e2e2e" if oscuro else "SystemButtonFace"
+        fg = "white" if oscuro else "black"
+
+        # Intenta aplicar colores al widget
+        try:
+            widget.configure(bg=bg, fg=fg)
+        except:
+            try:
+                widget.configure(bg=bg)  # algunos widgets no tienen 'fg'
+            except:
+                pass
+
+        # Recorre hijos (frames, botones, labels, etc.)
+        for child in widget.winfo_children():
+            self._actualizar_estilos(child, oscuro)
+
+
+    def limpiar_chat(self):
+        self.text_chat.config(state="normal")
+        self.text_chat.delete("1.0", tk.END)
+        self.text_chat.config(state="disabled")
+
+        # Limpia también imágenes almacenadas en RAM
+        self.imagenes_chat.clear()
+
 
     # imagenes
     def _insertar_imagen_chat(self, ruta):
@@ -349,10 +420,13 @@ class ChatClientGUI:
         self.username = username
 
         # Enviar frame de login
+        ts = time.strftime("%H:%M:%S")
+
         header = {
             "type": "login",
             "from": self.username,
             "to": "SERVER",
+            "timestamp": ts,
         }
         send_frame(self.sock, header)
 
@@ -377,7 +451,8 @@ class ChatClientGUI:
                     remitente = header.get("from")
                     destino = header.get("to")
                     msg = header.get("message", "")
-                    self.cola_mensajes.put(f"{remitente} -> {destino}: {msg}\n")
+                    ts = header.get("timestamp", "??:??")
+                    self.cola_mensajes.put(f"[{ts}] {remitente} -> {destino}: {msg}\n")
                     self.audio_manager.reproducir_audio("notif.wav", self._log_local)
 
                 elif mtype == "file" or mtype == "audio":
@@ -459,17 +534,20 @@ class ChatClientGUI:
         if not texto:
             return
 
+        ts = time.strftime("%H:%M:%S")
+
         header = {
-            "type": "text",
-            "from": self.username,
-            "to": destino,
-            "message": texto,
+        "type": "text",
+        "from": self.username,
+        "to": destino,
+        "message": texto,
+        "timestamp": ts,
         }
 
         try:
             send_frame(self.sock, header)
             # Mostrar en chat local
-            self._log_local(f"Yo -> {destino}: {texto}\n")
+            self._log_local(f"[{ts}] Yo -> {destino}: {texto}\n")
         except OSError as e:
             messagebox.showerror("Error", f"No se pudo enviar el mensaje: {e}")
             self.conectado = False
@@ -503,12 +581,15 @@ class ChatClientGUI:
             ):
                 return
 
+        ts = time.strftime("%H:%M:%S")
+
         header = {
-            "type": "file",
-            "from": self.username,
-            "to": destino,
-            "filename": filename,
-            "filesize": tam,
+           "type": "file",
+           "from": self.username,
+           "to": destino,
+           "filename": filename,
+           "filesize": tam,
+           "timestamp": ts,
         }
 
         # Crear ventana de progreso
@@ -533,7 +614,7 @@ class ChatClientGUI:
                 self.master.after(
                     0,
                     lambda: self._log_local(
-                        f"[ARCHIVO] Yo -> {destino}: '{filename}' ({tam} bytes)\n"
+                        f"[{ts}] [ARCHIVO] Yo -> {destino}: '{filename}' ({tam} bytes)\n"
                     ),
                 )
 
@@ -595,6 +676,34 @@ class ChatClientGUI:
                 state=tk.NORMAL if self.conectado else tk.DISABLED
             )
             self.btn_detener_audio.config(state="disabled")
+            
+    # Menú de opciones
+    def _mostrar_menu_opciones(self):
+        x = self.btn_opciones.winfo_rootx()
+        y = self.btn_opciones.winfo_rooty() + self.btn_opciones.winfo_height()
+        
+        self.menu_opciones.tk_popup(x, y)
+        self.menu_opciones.grab_release()
+        
+    def abrir_carpeta_descargas(self):
+        ruta = os.path.abspath(CARPETA_DESCARGAS)
+        
+        try:
+            sistema = platform.system()
+            
+            # Windows
+            if sistema == "Windows":
+                os.startfile(ruta)
+            # MacOS
+            elif sistema == "Darwin":  
+                subprocess.Popen(["open", ruta])
+            # Linux
+            else:  
+                subprocess.Popen(["xdg-open", ruta])
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir la carpeta: {e}")
+        
   
     # ========= GUI helpers =========
 
@@ -735,9 +844,9 @@ class ChatClientGUI:
                         self._insertar_imagen_chat(ruta)
 
                     elif tipo == "file":
-                        _, ruta, remitente, filename = item
+                        _, ruta, remitente, filename, ts = item
                         self._log_local(
-                            f"[ARCHIVO] {remitente} envió {filename}. Guardado en: {ruta}\n"
+                            f"[{ts}] [ARCHIVO] {remitente} envió {filename}. Guardado en: {ruta}\n"
                         )
 
                     elif tipo == "audio":
