@@ -924,7 +924,6 @@ class ChatClientGUI:
         self.master.destroy()
 
 
-
 def main():
     root = tk.Tk()
     app = ChatClientGUI(root)
