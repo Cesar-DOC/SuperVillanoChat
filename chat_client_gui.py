@@ -184,6 +184,25 @@ class ChatClientGUI:
         
         self.btn_enviar.pack(side="left", padx=5)
 
+        # --- Botones de respuestas rápidas ---
+        self.btn_rapida_1 = tk.Button(
+            frame_bottom, text="👍",
+            command=lambda: self.enviar_respuesta_rapida("De acuerdo 👍")
+        )
+        self.btn_rapida_1.pack(side="left", padx=3)
+
+        self.btn_rapida_2 = tk.Button(
+            frame_bottom, text="Ya voy",
+            command=lambda: self.enviar_respuesta_rapida("Ya voy 🚶‍♂️")
+        )
+        self.btn_rapida_2.pack(side="left", padx=3)
+
+        self.btn_rapida_3 = tk.Button(
+            frame_bottom, text="Gracias",
+            command=lambda: self.enviar_respuesta_rapida("¡Gracias! 🙌")
+        )
+        self.btn_rapida_3.pack(side="left", padx=3)
+
         self.btn_archivo = tk.Button(
             frame_bottom, text="Enviar archivo", command=self.enviar_archivo
         )
@@ -425,7 +444,7 @@ class ChatClientGUI:
             ):
                 return None
         return usuario
-
+    
     def enviar_texto_evento(self, event):
         self.enviar_texto()
 
@@ -459,6 +478,14 @@ class ChatClientGUI:
             self.sock = None
 
         self.entry_msg.delete(0, tk.END)
+
+    def enviar_respuesta_rapida(self, mensaje):
+        # Insertar el mensaje en la caja de texto
+        self.entry_msg.delete(0, tk.END)
+        self.entry_msg.insert(0, mensaje)
+
+        # Enviar usando la función normal
+        self.enviar_texto()
 
     def enviar_archivo(self):
         if not self.conectado or not self.sock:
