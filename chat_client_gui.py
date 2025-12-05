@@ -1,4 +1,5 @@
 # chat_client_gui_files.py
+# pyright: ignore[reportMissingImports]
 from asyncio import subprocess
 import json
 import os
@@ -11,7 +12,7 @@ import time
 import tkinter as tk
 from tkinter import Toplevel, filedialog, messagebox, scrolledtext, ttk
 from PIL import Image, ImageTk
-from playsound3 import playsound
+from pyasound3 import playsound
 from audio_manager import AudioManager
 from emoji_manager import mostrar_paleta_emojis
 
@@ -102,6 +103,8 @@ class ChatClientGUI:
 
         self.audio_manager = AudioManager(self)
 
+
+
         # Cola para mensajes entrantes (texto que se mostrará)
         self.cola_mensajes = queue.Queue()
         # Cola para updates de userlist (lista de strings)
@@ -185,6 +188,7 @@ class ChatClientGUI:
         self.btn_opciones.grid(row=0, column=7, padx=5)
         
         self.menu_opciones = tk.Menu(self.master, tearoff=0)
+
         self.menu_opciones.add_command(
             label="📂 Abrir carpeta de descargas", 
             command=self.abrir_carpeta_descargas
@@ -193,7 +197,30 @@ class ChatClientGUI:
             label="Modo oscuro",
             command=self.toggle_modo
         )
-        
+        # ---------------------- SUBMENÚ DE TEMAS ------------------------
+
+        # Temas predefinidos
+        self.temas = {
+            "Claro":  {"bg": "white",      "fg": "black"},
+            "Oscuro": {"bg": "#2e2e2e",    "fg": "white"},
+            "Azul":   {"bg": "#1e1f3b",    "fg": "#dbe4ff"},
+            "Verde":  {"bg": "#d8f3dc",    "fg": "#081c15"}
+        }
+
+        # Crear submenú "Tema"
+        submenu_tema = tk.Menu(self.menu_opciones, tearoff=0)
+
+        # Añadir cada tema
+        for nombre in self.temas:
+               submenu_tema.add_command(
+                   label=nombre,
+                   command=lambda n=nombre: self.aplicar_tema(n)
+        )
+
+        # Integrarlo al menú Opciones
+        self.menu_opciones.add_cascade(label="Tema", menu=submenu_tema)
+
+
         emoji_button = tk.Button(
             frame_bottom, 
             text="😊", 
@@ -244,12 +271,61 @@ class ChatClientGUI:
             "#7F7FFF", "#BF7FFF", "#FF7FFF", "#FF99C8", "#C8F9FF",
             "#A5FFAF", "#FFD1A5", "#B5A5FF", "#FFA5E2"
         ]
+	# Temas predefinidos
+        self.temas = {
+              "Claro": {
+                  "bg": "white",
+                  "fg": "black",
+                  "entry_bg": "white",
+                  "entry_fg": "black"
+                  },
+              "Oscuro": {
+                  "bg": "#2e2e2e",
+                  "fg": "white",
+                  "entry_bg": "#3a3a3a",
+                  "entry_fg": "white"
+                  },
+              "Azul": {
+                  "bg": "#1e1f3b",
+                  "fg": "#dbe4ff",
+                  "entry_bg": "#2a2b4f",
+                  "entry_fg": "#dbe4ff"
+                  },
+              "Verde": {
+                  "bg": "#0f3d0f",
+                  "fg": "white",
+                  "entry_bg": "#145214",
+                  "entry_fg": "white"
+                  }
+        }
+
+        # Menú principal
+        menubar = tk.Menu(self.master)
+
+        # Menú Opciones
+        menu_opciones = tk.Menu(menubar, tearoff=0)
+        menu_temas = tk.Menu(menu_opciones, tearoff=0)
+	
+        # Agregar cada tema al menú
+        for nombre, valores in self.temas.items():
+         menu_temas.add_command(
+                label=nombre,
+                command=lambda n=nombre: self.aplicar_tema(n)
+        )
+
+        menu_opciones.add_cascade(label="Tema", menu=menu_temas)
+        menubar.add_cascade(label="Opciones", menu=menu_opciones)
+
+        self.master.config(menu=menubar)
 
         # Timer para procesar colas
         self.master.after(100, self.procesar_colas)
 
         # Cierre ordenado
         self.master.protocol("WM_DELETE_WINDOW", self.cerrar)
+
+   
+
 
     def toggle_modo(self):
         if not self.modo_oscuro:
@@ -262,6 +338,30 @@ class ChatClientGUI:
             self._actualizar_estilos(self.master, oscuro=False)
             self.menu_opciones.entryconfig(1, label="Activar modo oscuro")
             self.modo_oscuro = False
+
+    def aplicar_tema(self, nombre_tema):
+       tema = self.temas[nombre_tema]
+
+       self.master.configure(bg=tema["bg"])
+
+       for widget in self.master.winfo_children():
+           try:
+               widget.configure(bg=tema["bg"], fg=tema["fg"])
+           except:
+               pass
+
+       self.text_chat.configure(
+           bg=tema["entry_bg"],
+           fg=tema["entry_fg"],
+           insertbackground=tema["fg"]
+       )
+
+       self.entry_msg.configure(
+           bg=tema["entry_bg"],
+           fg=tema["entry_fg"],
+           insertbackground=tema["fg"]
+       )
+
 
     def _actualizar_estilos(self, widget, oscuro):
         bg = "#2e2e2e" if oscuro else "SystemButtonFace"
@@ -824,10 +924,13 @@ class ChatClientGUI:
         self.master.destroy()
 
 
+
 def main():
     root = tk.Tk()
     app = ChatClientGUI(root)
     root.mainloop()
+
+
 
 
 if __name__ == "__main__":
